@@ -25,17 +25,17 @@ gid="$(id -g)"
 
 # 停止并删除名为ros_noetic_proto的docker容器，输出重定向到/dev/null，即不显示任何输出
 echo "stop and rm docker" 
-docker stop ros_noetic_proto > /dev/null
-docker rm -v -f ros_noetic_proto > /dev/null
+docker stop ros_proto > /dev/null
+docker rm -v -f ros_proto > /dev/null
 
 # 输出开始docker的信息
 echo "start docker"
-# 使用docker run命令以交互模式启动一个名为ros_noetic_proto的容器，并设置相关环境变量和挂载点
+# 使用docker run命令以交互模式启动一个名为ros_proto的容器，并设置相关环境变量和挂载点
 # -it 交互模式 -d 后台运行
 
 docker run -it -d \
 --privileged=true \
---name ros_noetic_proto \
+--name ros_proto \
 -e DISPLAY=$display \
 -e DOCKER_USER="${user}" \
 -e USER="${user}" \
@@ -49,7 +49,7 @@ docker run -it -d \
 ros_protobuf:noetic
 
 # --privileged=true \                           # 容器拥有额外的权限
-# --name ros_noetic_proto \                     # 设置容器的名称
+# --name ros_proto \                            # 设置容器的名称
 # -e DISPLAY=$display \                         # 设置DISPLAY环境变量，用于图形界面的显示
 # -e DOCKER_USER="${user}" \                    # 设置容器内DOCKER_USER环境变量为当前用户
 # -e USER="${user}" \                           # 设置容器内USER环境变量为当前用户
