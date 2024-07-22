@@ -12,7 +12,7 @@
 
 ```bash
 cd ros_protobuf_msg/docker/build
-docker build --network host -t ros_protobuf:noetic  -f ros_proto.dockerfile .
+docker build --network host -t ros_proto:20.04  -f ros_proto.dockerfile .
 ```
 
 ## 2.进入docker容器

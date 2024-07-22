@@ -1,4 +1,4 @@
-#include "./test_template.h"
+#include "test_template.h"
 
 int main() {
   Test<double, double> t1(1.1, 1.1);

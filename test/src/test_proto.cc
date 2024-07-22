@@ -47,7 +47,7 @@ int main() {
 
   std::string des;
   const google::protobuf::Descriptor* descriptor =
-      superbai::sample::RosProtoTest::descriptor();
+      bean::sample::RosProtoTest::descriptor();
   for (int i = 0; i < descriptor->field_count(); ++i) {
     const google::protobuf::FieldDescriptor* field = descriptor->field(i);
 

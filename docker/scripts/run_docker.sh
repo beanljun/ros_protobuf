@@ -1,4 +1,4 @@
-#!/usr/bin/env bash # 使用bash解释器执行此脚本
+#!/usr/bin/env bash 
 
 # 计算并设置MONITOR_HOME_DIR变量为脚本所在目录的上两级目录的绝对路径
 MONITOR_HOME_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
@@ -46,7 +46,7 @@ docker run -it -d \
 -v ${MONITOR_HOME_DIR}:/work \
 -v ${XDG_RUNTIME_DIR}:${XDG_RUNTIME_DIR} \
 --network host \
-ros_protobuf:noetic
+ros_proto:20.04
 
 # --privileged=true \                           # 容器拥有额外的权限
 # --name ros_proto \                            # 设置容器的名称
@@ -60,4 +60,4 @@ ros_protobuf:noetic
 # -v ${MONITOR_HOME_DIR}:/work \                # 将MONITOR_HOME_DIR目录挂载到容器的/work目录
 # -v ${XDG_RUNTIME_DIR}:${XDG_RUNTIME_DIR} \    # 将XDG_RUNTIME_DIR目录挂载到容器内相同路径
 # --network host \                              # 容器使用宿主机的网络
-# ros_protobuf:noetic                           # 使用的镜像名和标签
+# ros_protobuf:20.04                            # 使用的镜像名和标签

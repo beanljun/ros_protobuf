@@ -7,11 +7,13 @@ include_directories(
 
 add_subdirectory(proto)
 
-add_executable(test_temple test_template.cc)
+add_executable(test_temple src/test_template.cc)
 
-add_executable(test_sfinae sfinae_test.cc)
+add_executable(test_sfinae src/sfinae_test.cc)
 
-add_executable(test_proto  test_proto.cpp)
+add_executable(test_proto  src/test_proto.cc)
+
+add_executable(test_epoll src/test_epoll.cc)
 
 target_link_libraries(test_proto 
 proto_test
