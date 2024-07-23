@@ -80,6 +80,7 @@ NodeHandle::NodeHandle(const std::string& ns, const M_string& remappings)
   , collection_(0)
 {
   std::string tilde_resolved_ns;
+  // 如果输入的字符串第一位为~，那么最终会调用获取本节点的名字进行拼装，否则直接拷贝；
   if (!ns.empty() && ns[0] == '~')// starts with tilde
     tilde_resolved_ns = names::resolve(ns);
   else
@@ -156,7 +157,7 @@ void NodeHandle::construct(const std::string& ns, bool validate_name)
     ROS_FATAL("You must call ros::init() before creating the first NodeHandle");
     ROS_BREAK();
   }
-
+  // 创建保存发布器、接收器的集合
   collection_ = new NodeHandleBackingCollection;
   unresolved_namespace_ = ns;
   // if callback_queue_ is nonnull, we are in a non-nullary constructor
@@ -171,7 +172,7 @@ void NodeHandle::construct(const std::string& ns, bool validate_name)
   ok_ = true;
 
   boost::mutex::scoped_lock lock(g_nh_refcount_mutex);
-
+  // 如果当前节点的引用计数为0，且ros没有启动，那么启动ros
   if (g_nh_refcount == 0 && !ros::isStarted())
   {
     g_node_started_by_nh = true;
@@ -286,6 +287,7 @@ std::string NodeHandle::resolveName(const std::string& name, bool remap, no_vali
   return names::resolve(final, false);
 }
 
+// 如果发布器注册完成后，会返回一个Publisher对象，可以用来执行发布
 Publisher NodeHandle::advertise(AdvertiseOptions& ops)
 {
   ops.topic = resolveName(ops.topic);
@@ -300,16 +302,17 @@ Publisher NodeHandle::advertise(AdvertiseOptions& ops)
       ops.callback_queue = getGlobalCallbackQueue();
     }
   }
-
+  // 回调函数组，主要处理订阅者连接等一些行为
   SubscriberCallbacksPtr callbacks(boost::make_shared<SubscriberCallbacks>(ops.connect_cb, ops.disconnect_cb, 
                                                                            ops.tracked_object, ops.callback_queue));
-
+  // 构建一个pub对象
   Publisher pub(ops.topic, ops.md5sum, ops.datatype, ops.latch, *this, callbacks);
 
   if (ops.latch) {
     callbacks->push_latched_message_ = pub.getLastMessageCallback();
   }
 
+  // 调用TopicManager实例的advertise方法，判断是否注册成功
   if (TopicManager::instance()->advertise(ops, callbacks))
   {
 
@@ -329,6 +332,7 @@ Subscriber NodeHandle::subscribe(SubscribeOptions& ops)
   ops.topic = resolveName(ops.topic);
   if (ops.callback_queue == 0)
   {
+    // 如果没有设置ops.callback_queue，这里会获得一个node_handle的回调队列或者全局的回调队列；
     if (callback_queue_)
     {
       ops.callback_queue = callback_queue_;
@@ -339,8 +343,10 @@ Subscriber NodeHandle::subscribe(SubscribeOptions& ops)
     }
   }
 
+  // 调用TopicManager的subscribe函数，传入ops参数
   if (TopicManager::instance()->subscribe(ops))
   {
+    // 构造一个Subscriber并返回；
     Subscriber sub(ops.topic, *this, ops.helper);
 
     {

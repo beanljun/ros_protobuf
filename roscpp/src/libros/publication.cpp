@@ -191,8 +191,10 @@ bool Publication::enqueueMessage(const SerializedMessage& m)
   {
     // If we have a header, we know it's immediately after the message length
     // Deserialize it, write the sequence, and then serialize it again.
+    // 如果有header，那么我们知道它紧跟在消息长度后面，反序列化它，写入序列号，然后再次序列化
     namespace ser = ros::serialization;
     std_msgs::Header header;
+    // +4是因为前面4个字节是消息长度，所以header的起始位置是m.buf.get() + 4，数据长度是m.num_bytes - 4
     ser::IStream istream(m.buf.get() + 4, m.num_bytes - 4);
     ser::deserialize(istream, header);
     header.seq = seq;
@@ -203,6 +205,8 @@ bool Publication::enqueueMessage(const SerializedMessage& m)
   for(V_SubscriberLink::iterator i = subscriber_links_.begin();
       i != subscriber_links_.end(); ++i)
   {
+    // 每个publication下，都管理着一堆sub_link，请注意SubscriberLink是一个虚基类，实际运行的是TransportSubscriberLink，
+    // 因此这里需要调用的是TransportSubscriberLink的enqueueMessage函数
     const SubscriberLinkPtr& sub_link = (*i);
     sub_link->enqueueMessage(m, true, false);
   }
@@ -428,8 +432,10 @@ bool Publication::hasSubscribers()
 
 void Publication::publish(SerializedMessage& m)
 {
-  if (m.message)
+  // 无拷贝发布
+  if (m.message)  
   {
+    // 检查这个进程内的所有订阅器，对于intra_process进程内的订阅器，将消息加入到sub的消息队列中去；
     boost::mutex::scoped_lock lock(subscriber_links_mutex_);
     V_SubscriberLink::const_iterator it = subscriber_links_.begin();
     V_SubscriberLink::const_iterator end = subscriber_links_.end();
@@ -445,8 +451,10 @@ void Publication::publish(SerializedMessage& m)
     m.message.reset();
   }
 
+  // 序列化发布
   if (m.buf)
   {
+    // 对于进程外的，发布到publish_queue中去，注意这里只有入列操作，并未真正发布
     boost::mutex::scoped_lock lock(publish_queue_mutex_);
     publish_queue_.push_back(m);
   }
@@ -463,6 +471,7 @@ void Publication::processPublishQueue()
       return;
     }
 
+    // 将数据又转移到一个queue中
     queue.insert(queue.end(), publish_queue_.begin(), publish_queue_.end());
     publish_queue_.clear();
   }
@@ -476,6 +485,7 @@ void Publication::processPublishQueue()
   V_SerializedMessage::iterator end = queue.end();
   for (; it != end; ++it)
   {
+    // 对这个queue执行enqueueMessage操作
     enqueueMessage(*it);
   }
 }

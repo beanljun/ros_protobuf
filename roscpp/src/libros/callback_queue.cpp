@@ -307,6 +307,7 @@ CallbackQueue::CallOneResult CallbackQueue::callOne(ros::WallDuration timeout)
 
 void CallbackQueue::callAvailable(ros::WallDuration timeout)
 {
+  // step1. 创建了一个TLS对象，这个对象的作用是防止递归调用
   setupTLS();
   TLS* tls = tls_.get();
 
@@ -322,15 +323,17 @@ void CallbackQueue::callAvailable(ros::WallDuration timeout)
     {
       if (!timeout.isZero())
       {
+        // step2. 如果回调队列为空，那么等待timeout时间
         condition_.wait_for(lock, boost::chrono::nanoseconds(timeout.toNSec()));
       }
-
+       // step3. 等待timeout时间后，如果回调队列还是为空，那么直接返回 
       if (callbacks_.empty() || !enabled_)
       {
         return;
       }
     }
 
+    // step4. 将回调队列中的回调函数添加到TLS对象中
     bool was_empty = tls->callbacks.empty();
 
     tls->callbacks.insert(tls->callbacks.end(), callbacks_.begin(), callbacks_.end());
@@ -339,11 +342,12 @@ void CallbackQueue::callAvailable(ros::WallDuration timeout)
     calling_ += tls->callbacks.size();
 
     if (was_empty)
-    {
+    { // 如果添加前是空的，那么设置迭代器指向添加后的第一个元素
       tls->cb_it = tls->callbacks.begin();
     }
   }
 
+  // step5. 调用callOneCB()逐个调用具体的回调函数
   size_t called = 0;
 
   while (!tls->callbacks.empty())

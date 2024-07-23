@@ -58,12 +58,18 @@ ConnectionManager::~ConnectionManager()
 
 void ConnectionManager::start()
 {
+  // 将清除无效连接的回调函数加入到poll_manager；
   poll_manager_ = PollManager::instance();
   poll_conn_ = poll_manager_->addPollThreadListener(boost::bind(&ConnectionManager::removeDroppedConnections, 
 								this));
 
   // Bring up the TCP listener socket
+  // 启动TCP listen，将socket的回调添加到epoll中，同时绑定tcprosAcceptConnection
+
+  // tcprosAcceptConnection是连接后产生的回调函数，这里会把它设置为tcpserver_transport_的accept_cb_成员变量，
+  // 在产生连接后被调用：构造一个connection结构体，并添加到连接池connections_中。
   tcpserver_transport_ = boost::make_shared<TransportTCP>(&poll_manager_->getPollSet());
+  // 在listen函数中会调用initializeSocket()、enable_read()等函数；
   if (!tcpserver_transport_->listen(network::getTCPROSPort(), 
 				    MAX_TCPROS_CONN_QUEUE, 
 				    boost::bind(&ConnectionManager::tcprosAcceptConnection, this, boost::placeholders::_1)))
@@ -73,6 +79,7 @@ void ConnectionManager::start()
   }
 
   // Bring up the UDP listener socket
+  // 启动UDP listen；
   udpserver_transport_ = boost::make_shared<TransportUDP>(&poll_manager_->getPollSet());
   if (!udpserver_transport_->createIncoming(0, true))
   {
@@ -182,6 +189,7 @@ void ConnectionManager::udprosIncomingConnection(const TransportUDPPtr& transpor
   onConnectionHeaderReceived(conn, header);
 }
 
+// 新创建一个ConnectionPtr对象然后将对象加入到连接池中
 void ConnectionManager::tcprosAcceptConnection(const TransportTCPPtr& transport)
 {
   std::string client_uri = transport->getClientURI();
@@ -190,6 +198,8 @@ void ConnectionManager::tcprosAcceptConnection(const TransportTCPPtr& transport)
   ConnectionPtr conn(boost::make_shared<Connection>());
   addConnection(conn);
 
+  // 收到sub发送的消息头时，会触发这么一个回调onConnectionHeaderReceived()，这个函数中包含sub_Link。
+  // 最后publisher还会调用sub_link->handleHeader函数返回处理后的信息。
   conn->initialize(transport, true, boost::bind(&ConnectionManager::onConnectionHeaderReceived, this, boost::placeholders::_1, boost::placeholders::_2));
 }
 

@@ -142,6 +142,7 @@ public:
   bool isLatching() { return isLatched(); }
 
   void publish(SerializedMessage& m);
+  // 数据转移到一个queue中，然后对这个queue执行enqueueMessage
   void processPublishQueue();
 
   bool validateHeader(const Header& h, std::string& error_msg);

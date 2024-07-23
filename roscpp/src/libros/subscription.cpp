@@ -337,8 +337,10 @@ bool Subscription::pubUpdate(const V_string& new_pubs)
             i != additions.end(); ++i)
   {
     // this function should never negotiate a self-subscription
+    // 在尝试建立新的订阅连接时，应避免节点自我订阅
     if (XMLRPCManager::instance()->getServerURI() != *i)
     {
+      // 核心代码
       retval &= negotiateConnection(*i);
     }
     else
@@ -431,10 +433,12 @@ bool Subscription::negotiateConnection(const std::string& xmlrpc_uri)
 
   ROSCPP_LOG_DEBUG("Began asynchronous xmlrpc connection to [%s:%d]", peer_host.c_str(), peer_port);
 
-  // The PendingConnectionPtr takes ownership of c, and will delete it on
-  // destruction.
+
+  // PendingConnectionPtr接管了 c 的所有权，并将在析构时删除它。
   PendingConnectionPtr conn(boost::make_shared<PendingConnection>(c, udp_transport, shared_from_this(), xmlrpc_uri));
 
+  // 将这个connection加入到added_connections_队列中
+  // 在xmlrpc有一个serverThreadFunc 线程，add_connections_队列会在这里处理。
   XMLRPCManager::instance()->addASyncConnection(conn);
   // Put this connection on the list that we'll look at later.
   {
@@ -519,6 +523,8 @@ void Subscription::pendingConnectionDone(const PendingConnectionPtr& conn, XmlRp
     int pub_port = proto[2];
     ROSCPP_CONN_LOG_DEBUG("Connecting via tcpros to topic [%s] at host [%s:%d]", name_.c_str(), pub_host.c_str(), pub_port);
 
+    // 创建一个TransportTCPPtr 对象，并新建一个pub_link并通过addPublisherLink加入到发布者对象列表中，
+    // 每个subscriber会维护一个publisher对象列表。
     TransportTCPPtr transport(boost::make_shared<TransportTCP>(&PollManager::instance()->getPollSet()));
     if (transport->connect(pub_host, pub_port))
     {
@@ -734,6 +740,7 @@ bool Subscription::addCallback(const SubscriptionCallbackHelperPtr& helper, cons
     cached_deserializers_.reserve(callbacks_.size());
 
     // if we have any latched links, we need to immediately schedule callbacks
+    // 如果有任何latched链接，我们需要立即安排回调
     if (!latched_messages_.empty())
     {
       boost::mutex::scoped_lock lock(publisher_links_mutex_);

@@ -89,7 +89,7 @@ void Publisher::publish(const boost::function<SerializedMessage(void)>& serfunc,
                    impl_->topic_.c_str());
     return;
   }
-
+  // 调用了TopicManager的publish方法，serfunc是相应的序列化函数，m是序列化后的消息
   TopicManager::instance()->publish(impl_->topic_, serfunc, m);
 
   if (isLatched()) {

@@ -324,12 +324,14 @@ void start()
 
   initInternalTimerManager();
 
+  // 首先，TopicManager的processPublishQueues函数会被注册到PollManager中去，等待信号触发；
+  // 随后在ConnectionManager中启动listen，listen会将socket添加到epoll，同时创建connection对象；
+  // 最后启动PollManager，执行循环回调。
   TopicManager::instance()->start();
   ServiceManager::instance()->start();
   ConnectionManager::instance()->start();
   PollManager::instance()->start();
   XMLRPCManager::instance()->start();
-
   if (!(g_init_options & init_options::NoSigintHandler))
   {
     signal(SIGINT, basicSigintHandler);
@@ -458,6 +460,7 @@ void check_ipv6_environment() {
 
 void init(const M_string& remappings, const std::string& name, uint32_t options)
 {
+  // 程序退出时注册一个回调函数，确保这个注册动作只会执行一次
   if (!g_atexit_registered)
   {
     g_atexit_registered = true;
@@ -500,6 +503,7 @@ void init(int& argc, char** argv, const std::string& name, uint32_t options)
 
   int full_argc = argc;
   // now, move the remapping argv's to the end, and decrement argc as needed
+  // 解析参数，形成一个参数列表，然后将这个列表传输到各个模块中用作初始化
   for (int i = 0; i < argc; )
   {
     std::string arg = argv[i];

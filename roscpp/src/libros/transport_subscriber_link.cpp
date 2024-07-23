@@ -171,6 +171,7 @@ void TransportSubscriberLink::startMessageWrite(bool immediate_write)
 
   if (m.num_bytes > 0)
   {
+    // 终于要发了
     connection_->write(m.buf, m.num_bytes, boost::bind(&TransportSubscriberLink::onMessageWritten, this, boost::placeholders::_1), immediate_write);
   }
 }
@@ -210,7 +211,7 @@ void TransportSubscriberLink::enqueueMessage(const SerializedMessage& m, bool se
     {
       queue_full_ = false;
     }
-
+    // outbox同样是一个std::queue<SerializedMessage>，存储要发送的消息
     outbox_.push(m);
   }
 

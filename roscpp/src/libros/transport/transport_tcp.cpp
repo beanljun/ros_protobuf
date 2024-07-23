@@ -141,6 +141,8 @@ bool TransportTCP::initializeSocket()
   if (poll_set_)
   {
     ROS_DEBUG("Adding tcp socket [%d] to pollset", sock_);
+    // 把socketUpdate方法添加到epoll的回调中去。
+    // socketUpdate方法中包含了socket的读写回调，因此对socket的任何操作都会在epoll唤醒时触发，请记住这个函数，后面会详细分析。
     poll_set_->addSocket(sock_, boost::bind(&TransportTCP::socketUpdate, this, boost::placeholders::_1), shared_from_this());
 #if defined(POLLRDHUP) // POLLRDHUP is not part of POSIX!
     // This is needed to detect dead connections. #1704
@@ -422,7 +424,7 @@ bool TransportTCP::listen(int port, int backlog, const AcceptCallback& accept_cb
       server_port_ = ntohs(((sockaddr_in6 *)&server_address_)->sin6_port);
       break;
   }
-
+  // initializeSocket()，会调用addSocket函数
   if (!initializeSocket())
   {
     return false;
@@ -430,6 +432,7 @@ bool TransportTCP::listen(int port, int backlog, const AcceptCallback& accept_cb
 
   if (!(flags_ & SYNCHRONOUS))
   {
+    // 这个函数会将POLLIN加入到epoll中，这样epoll就会监听读事件了。
     enableRead();
   }
 
@@ -601,6 +604,7 @@ void TransportTCP::enableRead()
 
   if (!expecting_read_)
   {
+    // 将POLLIN加入到epoll中，这样epoll就会监听读事件了。
     poll_set_->addEvents(sock_, POLLIN);
     expecting_read_ = true;
   }
@@ -641,6 +645,8 @@ void TransportTCP::enableWrite()
 
   if (!expecting_write_)
   {
+    // 把输出事件添加到了epoll中。这样，在socketUpdate函数中，就会执行write_cb_回调函数
+    // 这个函数最终会调用到TransportTCP::write函数
     poll_set_->addEvents(sock_, POLLOUT);
     expecting_write_ = true;
   }

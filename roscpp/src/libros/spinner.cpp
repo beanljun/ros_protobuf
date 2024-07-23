@@ -124,6 +124,7 @@ void SingleThreadedSpinner::spin(CallbackQueue* queue)
 {
   if (!queue)
   {
+    // 获取一个全局队列，这个队列在Subscriber NodeHandle::subscribe(SubscribeOptions& ops)中也存放了一个
     queue = getGlobalCallbackQueue();
   }
 
@@ -135,9 +136,11 @@ void SingleThreadedSpinner::spin(CallbackQueue* queue)
   }
 
   ros::WallDuration timeout(0.1f);
-  ros::NodeHandle n;
+  ros::NodeHandle n; 
+  // 默认构造函数中会调用construct()将ok_置为true
   while (n.ok())
   {
+    // 调用队列的callAvailable方法，这个方法会调用队列中的所有回调函数
     queue->callAvailable(timeout);
   }
   spinner_monitor.remove(queue);

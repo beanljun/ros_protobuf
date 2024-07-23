@@ -188,9 +188,13 @@ void PollSet::update(int poll_timeout)
   createNativePollset();
 
   // Poll across the sockets we're servicing
+  // poll_sockets的底层就是epoll系统调用
+  // 调用poll_sockets进行轮询：使用epoll系统调用通过poll_sockets函数轮询监视的套接字。poll_sockets返回一个包含有事件发生的套接字信息的向量。
   boost::shared_ptr<std::vector<socket_pollfd> > ofds = poll_sockets(epfd_, &ufds_.front(), ufds_.size(), poll_timeout);
+  
   if (!ofds)
-  {
+  { 
+    // 如果poll_sockets返回空，表示轮询失败。如果失败不是因为EINTR（被信号中断），则记录错误。
     if (last_socket_error() != EINTR)
     {
       ROS_ERROR_STREAM("poll failed with error " << last_socket_error_string());
@@ -198,6 +202,7 @@ void PollSet::update(int poll_timeout)
   }
   else
   {
+    // 遍历有事件发生的套接字列表
     for (std::vector<socket_pollfd>::iterator it = ofds->begin() ; it != ofds->end(); ++it)
     {
       int fd = it->fd;
@@ -206,11 +211,13 @@ void PollSet::update(int poll_timeout)
       TransportPtr transport;
       int events = 0;
 
+      // 如果没有事件（revents == 0），则跳过
       if (revents == 0)
       {
         continue;
       }
       {
+        // 使用socket_info_mutex_锁定套接字信息映射，查找当前套接字的信息。如果套接字已被删除，则跳过。
         boost::mutex::scoped_lock lock(socket_info_mutex_);
         M_SocketInfo::iterator it = socket_info_.find(fd);
         // the socket has been entirely deleted
@@ -222,6 +229,7 @@ void PollSet::update(int poll_timeout)
         const SocketInfo& info = it->second;
 
         // Store off the function and transport in case the socket is deleted from another thread
+        // 从套接字信息中提取回调函数、传输对象和注册的事件。
         func = info.func_;
         transport = info.transport_;
         events = info.events_;
@@ -229,6 +237,7 @@ void PollSet::update(int poll_timeout)
 
       // If these are registered events for this socket, OR the events are ERR/HUP/NVAL,
       // call through to the registered function
+      // 如果有为套接字注册的事件发生，或者发生了错误（POLLERR）、挂起（POLLHUP）或无效事件（POLLNVAL），则准备调用回调函数
       if (func
           && ((events & revents)
               || (revents & POLLERR)
@@ -236,6 +245,7 @@ void PollSet::update(int poll_timeout)
               || (revents & POLLNVAL)))
       {
         bool skip = false;
+        // 如果事件是POLLNVAL、POLLERR或POLLHUP之一
         if (revents & (POLLNVAL|POLLERR|POLLHUP))
         {
           // If a socket was just closed and then the file descriptor immediately reused, we can
@@ -244,6 +254,8 @@ void PollSet::update(int poll_timeout)
           // we ignore the first instance of one of these errors.  If it's a real error we'll
           // hit it again next time through.
           boost::mutex::scoped_lock lock(just_deleted_mutex_);
+          // 如果该套接字刚被关闭然后立即重新使用了相同的文件描述符，可能会错误地认为是有效的套接字。
+          // 为了避免这种情况，如果这是第一次遇到这些错误之一，会跳过调用回调函数
           if (std::find(just_deleted_.begin(), just_deleted_.end(), fd) != just_deleted_.end())
           {
             skip = true;
@@ -252,8 +264,11 @@ void PollSet::update(int poll_timeout)
 
         if (!skip)
         {
+          // 如果不跳过，则调用回调函数，传入发生的事件。
           func(revents & (events|POLLERR|POLLHUP|POLLNVAL));
         }
+
+        // func就是socketUpdate函数，也就是说之前socket的各种回调函数都将在epoll被唤醒时进行回调
       }
     }
   }

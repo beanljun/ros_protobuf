@@ -49,6 +49,7 @@ PollManager::~PollManager()
   shutdown();
 }
 
+// 启动poll_manager的回调函数，运行槽函数
 void PollManager::start()
 {
   shutting_down_ = false;
@@ -71,16 +72,19 @@ void PollManager::shutdown()
 
 void PollManager::threadFunc()
 {
+  // 在非windows系统下，将所有信号屏蔽
   disableAllSignalsInThisThread();
 
+  // 不断地触发poll_signal_信号，然后调用poll_set_.update进行延时
   while (!shutting_down_)
   {
     {
       boost::recursive_mutex::scoped_lock lock(signal_mutex_);
+      // 执行所有与这个信号相连接的回调函数
       poll_signal_();
     }
 
-    if (shutting_down_)
+    if (shutting_down_) 
     {
       return;
     }
@@ -92,7 +96,10 @@ void PollManager::threadFunc()
 boost::signals2::connection PollManager::addPollThreadListener(const VoidFunc& func)
 {
   boost::recursive_mutex::scoped_lock lock(signal_mutex_);
+  // 将传入的函数和poll_signal_这个信号进行了绑定，后面在poll线程中会触发这个信号
   return poll_signal_.connect(func);
+  // poll_signal是一个boosts::signal2::signal对象，这个对象可以实现一个信号和多个槽的绑定。
+  // 经过上面的绑定，在poll线程中会定期地执行TopicManager::processPublishQueues函数，处理发布队列
 }
 
 void PollManager::removePollThreadListener(boost::signals2::connection c)

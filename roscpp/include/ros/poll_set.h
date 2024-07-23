@@ -141,7 +141,7 @@ private:
 
   boost::mutex just_deleted_mutex_;
   typedef std::vector<int> V_int;
-  V_int just_deleted_;
+  V_int just_deleted_; // 最近删除的套接字的文件描述符
 
   std::vector<socket_pollfd> ufds_;
 

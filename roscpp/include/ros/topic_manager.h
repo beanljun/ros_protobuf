@@ -74,6 +74,7 @@ public:
   bool subscribe(const SubscribeOptions& ops);
   bool unsubscribe(const std::string &_topic, const SubscriptionCallbackHelperPtr& helper);
 
+  // 首先创建一个PublicationPtr类型的发布器对象，随后将这个发布器对象添加到列表中去，最后使用master::execute的registerPublisher的RPC方法进行注册
   bool advertise(const AdvertiseOptions& ops, const SubscriberCallbacksPtr& callbacks);
   bool unadvertise(const std::string &topic, const SubscriberCallbacksPtr& callbacks);
 
@@ -133,10 +134,9 @@ public:
   bool isLatched(const std::string& topic);
 
 private:
-  /** if it finds a pre-existing subscription to the same topic and of the
-   *  same message type, it appends the Functor to the callback vector for
-   *  that subscription. otherwise, it returns false, indicating that a new
-   *  subscription needs to be created.
+  /** 
+   @brief 如果它找到了一个与相同主题和相同消息类型的预先存在的订阅，它将该Functor附加到该订阅的回调vec中。
+          否则，它返回false，表示需要创建一个新的订阅。
    */
   bool addSubCallback(const SubscribeOptions& ops);
 
@@ -162,7 +162,8 @@ private:
   bool unregisterPublisher(const std::string& topic);
 
   PublicationPtr lookupPublicationWithoutLock(const std::string &topic);
-
+  
+  // 所有当前进程的话题，都会在这个函数中遍历地发布，发布调用了每个publication的processPublishQueue成员函数
   void processPublishQueues();
 
   /** @brief Compute the statistics for the node's connectivity
@@ -197,13 +198,12 @@ private:
    */
   void getPublications(XmlRpc::XmlRpcValue &publications);
 
-  /** @brief Update local publisher lists.
+  /** @brief 更新本地发布者列表
+   * 
+   * 使用此方法更新给定主题上发布者的地址信息。
    *
-   * Use this method to update address information for publishers on a
-   * given topic.
-   *
-   * @param topic The topic of interest
-   * @param pubs The list of publishers to update.
+   * @param topic The topic of interest 
+   * @param pubs The list of publishers to update. 将要更新的发布者列表
    *
    * @return true on success, false otherwise.
    */

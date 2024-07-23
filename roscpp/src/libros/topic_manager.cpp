@@ -78,13 +78,22 @@ void TopicManager::start()
   connection_manager_ = ConnectionManager::instance();
   xmlrpc_manager_ = XMLRPCManager::instance();
 
+  // 向xmlrpc_manager注册一系列查询topic相关信息的回调函数；
+  // bind将这个函数名添加到xmlrpc_manager的列表中去，如果接收到这个远程调用就会执行对应的TopicManager的回调函数。
+  // 这几个函数大有用处，例如publisherUpdate会在发布器更新时调用，这样接收端就可以查看有没有自己需要的发布器了。
+
+  // 每个 bind 调用都将一个 XML-RPC 方法名称（如 "publisherUpdate"、"requestTopic" 等）与一个成员函数（
+  // 如 pubUpdateCallback、requestTopicCallback 等）绑定起来。
+  // 当 XML-RPC 方法被远程调用时，相应的成员函数就会被执行。
+  
   xmlrpc_manager_->bind("publisherUpdate", boost::bind(&TopicManager::pubUpdateCallback, this, boost::placeholders::_1, boost::placeholders::_2));
   xmlrpc_manager_->bind("requestTopic", boost::bind(&TopicManager::requestTopicCallback, this, boost::placeholders::_1, boost::placeholders::_2));
   xmlrpc_manager_->bind("getBusStats", boost::bind(&TopicManager::getBusStatsCallback, this, boost::placeholders::_1, boost::placeholders::_2));
   xmlrpc_manager_->bind("getBusInfo", boost::bind(&TopicManager::getBusInfoCallback, this, boost::placeholders::_1, boost::placeholders::_2));
   xmlrpc_manager_->bind("getSubscriptions", boost::bind(&TopicManager::getSubscriptionsCallback, this, boost::placeholders::_1, boost::placeholders::_2));
   xmlrpc_manager_->bind("getPublications", boost::bind(&TopicManager::getPublicationsCallback, this, boost::placeholders::_1, boost::placeholders::_2));
-
+  // 将发布队列处理函数注册给poll_manager，这个函数后续会TODO。
+  // processPublishQueues发布队列
   poll_manager_->addPollThreadListener(boost::bind(&TopicManager::processPublishQueues, this));
 }
 
@@ -247,6 +256,7 @@ bool TopicManager::subscribe(const SubscribeOptions& ops)
 {
   boost::mutex::scoped_lock lock(subs_mutex_);
 
+  // 调用addSubCallback函数，这个函数的作用是检查话题是否已经被订阅过
   if (addSubCallback(ops))
   {
     return true;
@@ -274,10 +284,11 @@ bool TopicManager::subscribe(const SubscribeOptions& ops)
 
   const std::string& md5sum = ops.md5sum;
   std::string datatype = ops.datatype;
-
+  // 构造一个新的Subscription 对象 s ，调用addCallback()方法添加回调函数，回调函数存储在ops.helper中。
   SubscriptionPtr s(boost::make_shared<Subscription>(ops.topic, md5sum, datatype, ops.transport_hints));
   s->addCallback(ops.helper, ops.md5sum, ops.callback_queue, ops.queue_size, ops.tracked_object, ops.allow_concurrent_callbacks);
-
+  
+  // 这里核心就是registerSubscriber()，即向ros master注册订阅器，然后将订阅器加入到subscriptions_列表中去
   if (!registerSubscriber(s, ops.datatype))
   {
     ROS_WARN("couldn't register subscriber on topic [%s]", ops.topic.c_str());
@@ -351,6 +362,7 @@ bool TopicManager::advertise(const AdvertiseOptions& ops, const SubscriberCallba
       return true;
     }
 
+    // 创建一个PublicationPtr类型的发布器对象，随后将这个发布器对象添加到列表中去
     pub = PublicationPtr(boost::make_shared<Publication>(ops.topic, ops.datatype, ops.md5sum, ops.message_definition, ops.queue_size, false, ops.has_header));
     pub->addCallbacks(callbacks);
     advertised_topics_.push_back(pub);
@@ -389,6 +401,7 @@ bool TopicManager::advertise(const AdvertiseOptions& ops, const SubscriberCallba
     sub->addLocalConnection(pub);
   }
 
+  // 使用master::execute的registerPublisher的RPC方法进行注册
   XmlRpcValue args, result, payload;
   args[0] = this_node::getName();
   args[1] = ops.topic;
@@ -484,8 +497,11 @@ bool TopicManager::registerSubscriber(const SubscriptionPtr& s, const string &da
   {
     return false;
   }
+  // 查找本进程的发布器
 
-  vector<string> pub_uris;
+  vector<string> pub_uris; // 用于存储所有非本地（即，不是由xmlrpc_manager_管理的服务器URI）发布者的URI。
+
+  // 遍历payload（包含所有发布者的URI），将不等于本地服务器URI的发布者URI添加到pub_uris向量中。
   for (int i = 0; i < payload.size(); i++)
   {
     if (payload[i] != xmlrpc_manager_->getServerURI())
@@ -494,7 +510,7 @@ bool TopicManager::registerSubscriber(const SubscriptionPtr& s, const string &da
     }
   }
 
-  bool self_subscribed = false;
+  bool self_subscribed = false;  // 标记是否有本地发布者
   PublicationPtr pub;
   const std::string& sub_md5sum = s->md5sum();
   // Figure out if we have a local publisher
@@ -507,29 +523,31 @@ bool TopicManager::registerSubscriber(const SubscriptionPtr& s, const string &da
       pub = *it;
       const std::string& pub_md5sum = pub->getMD5Sum();
 
+      // 检查主题名称是否与订阅者s的名称相同，且该主题未被丢弃
       if (pub->getName() == s->getName() && !pub->isDropped())
-	{
-	  if (!md5sumsMatch(pub_md5sum, sub_md5sum))
-	    {
-	      ROS_ERROR("md5sum mismatch making local subscription to topic %s.",
-			s->getName().c_str());
-	      ROS_ERROR("Subscriber expects type %s, md5sum %s",
-			s->datatype().c_str(), s->md5sum().c_str());
-	      ROS_ERROR("Publisher provides type %s, md5sum %s",
-			pub->getDataType().c_str(), pub->getMD5Sum().c_str());
-	      return false;
-	    }
+        {
+          // 检查MD5校验和是否匹配。如果不匹配，记录错误信息并返回false，表示订阅器注册失败
+          if (!md5sumsMatch(pub_md5sum, sub_md5sum))
+            {
+              ROS_ERROR("md5sum mismatch making local subscription to topic %s.",
+              s->getName().c_str());
+              ROS_ERROR("Subscriber expects type %s, md5sum %s",
+              s->datatype().c_str(), s->md5sum().c_str());
+              ROS_ERROR("Publisher provides type %s, md5sum %s",
+              pub->getDataType().c_str(), pub->getMD5Sum().c_str());
+              return false;
+            }
 
-	  self_subscribed = true;
-	  break;
-	}
+          self_subscribed = true;
+          break;
+        }
     }
   }
 
-  s->pubUpdate(pub_uris);
+  s->pubUpdate(pub_uris); // 传入过滤后的发布者URI列表
   if (self_subscribed)
   {
-    s->addLocalConnection(pub);
+    s->addLocalConnection(pub); // 将本地发布者添加到订阅者的连接中
   }
 
   return true;
@@ -549,7 +567,7 @@ bool TopicManager::unregisterSubscriber(const string &topic)
 
 bool TopicManager::pubUpdate(const string &topic, const vector<string> &pubs)
 {
-  SubscriptionPtr sub;
+  SubscriptionPtr sub;  // 存储找到的订阅者。
   {
     boost::mutex::scoped_lock lock(subs_mutex_);
 
@@ -560,13 +578,14 @@ bool TopicManager::pubUpdate(const string &topic, const vector<string> &pubs)
 
     ROS_DEBUG("Received update for topic [%s] (%d publishers)", topic.c_str(), (int)pubs.size());
     // find the subscription
+    // 遍历subscriptions_列表，寻找名称与给定topic相匹配且未被丢弃的订阅者。
     for (L_Subscription::const_iterator s  = subscriptions_.begin();
                                             s != subscriptions_.end(); ++s)
     {
       if ((*s)->getName() != topic || (*s)->isDropped())
         continue;
 
-      sub = *s;
+      sub = *s; // 找到了，将sub设置为该订阅者，并跳出循环。
       break;
     }
 
@@ -703,24 +722,25 @@ bool TopicManager::requestTopic(const string &topic,
 
 void TopicManager::publish(const std::string& topic, const boost::function<SerializedMessage(void)>& serfunc, SerializedMessage& m)
 {
+  // step1.首先调用了一个RAII的scoped_lock防止竞争；
   boost::recursive_mutex::scoped_lock lock(advertised_topics_mutex_);
 
   if (isShuttingDown())
   {
     return;
   }
-
+  // step2.随后调用lookupPublicationWithoutLock遍历搜索话题下的所有连接，
+  // 查找并返回一个与给定主题名称匹配的 PublicationPtr 对象
   PublicationPtr p = lookupPublicationWithoutLock(topic);
   if (p->hasSubscribers() || p->isLatching())
   {
     ROS_DEBUG_NAMED("superdebug", "Publishing message on topic [%s] with sequence number [%d]", p->getName().c_str(), p->getSequence());
 
-    // Determine what kinds of subscribers we're publishing to.  If they're intraprocess with the same C++ type we can
-    // do a no-copy publish.
+    // 决定发布的订阅者的类型。如果它们是相同的C++类型的进程内订阅者，可以进行无拷贝发布。
     bool nocopy = false;
     bool serialize = false;
 
-    // We can only do a no-copy publish if a shared_ptr to the message is provided, and we have type information for it
+    // 无拷贝发布只有在提供了消息的shared_ptr，有类型信息时才能进行。
     if (m.type_info && m.message)
     {
       p->getPublishTypes(serialize, nocopy, *m.type_info);
@@ -738,18 +758,21 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
 
     if (serialize || p->isLatching())
     {
+      // step3.调用serfunc进行序列化；
       SerializedMessage m2 = serfunc();
       m.buf = m2.buf;
       m.num_bytes = m2.num_bytes;
       m.message_start = m2.message_start;
     }
-
+    // step4.调用publish函数；
     p->publish(m);
 
     // If we're not doing a serialized publish we don't need to signal the pollset.  The write()
     // call inside signal() is actually relatively expensive when doing a nocopy publish.
+    // 如果不进行序列化发布，就不需要信号化pollset。在进行无拷贝发布时，signal()内部的write()调用实际上是相当昂贵的。
     if (serialize)
     {
+      // step5.给poll_manager发送信号，唤醒poll_manager中的槽函数
       poll_manager_->getPollSet().signal();
     }
   }

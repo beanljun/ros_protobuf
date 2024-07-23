@@ -79,6 +79,7 @@ public:
   /**
    * \brief Handle a publisher update list received from the master. Creates/drops PublisherLinks based on
    * the list.  Never handles new self-subscriptions
+   @brief 处理从master接收到的发布者更新列表。根据列表创建/删除PublisherLinks。永远不处理新的自订阅
    */
   bool pubUpdate(const std::vector<std::string> &pubs);
   /**
